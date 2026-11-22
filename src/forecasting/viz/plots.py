@@ -264,6 +264,209 @@ def plot_store_comparison(
     )
 
 
+MODEL_COLORS = {
+    "naive": "#adb5bd",
+    "seasonal_naive": "#6c757d",
+    "moving_average": "#343a40",
+    "ets": "#457b9d",
+    "sarimax": "#2a9d8f",
+    "prophet": "#e9c46a",
+    "lgbm": "#e76f51",
+}
+
+
+def plot_backtest_folds(folds: pd.DataFrame, title: str = "") -> go.Figure:
+    """Timeline of the rolling-origin backtest: one row per fold, train vs validation blocks.
+
+    Args:
+        folds: Columns ``fold, train_start, train_end, valid_start, valid_end`` (dates).
+            A fold named ``TEST`` is drawn in a different colour.
+    """
+    fig = go.Figure()
+    shown = set()
+    for _, r in folds.iloc[::-1].iterrows():
+        is_test = r["fold"] == "TEST"
+        blocks = [
+            ("train", r["train_start"], r["train_end"], "#a8dadc"),
+            (
+                "test" if is_test else "validasi",
+                r["valid_start"],
+                r["valid_end"],
+                "#e63946" if is_test else "#f4a261",
+            ),
+        ]
+        for label, start, end, color in blocks:
+            fig.add_bar(
+                # on a date axis Plotly reads bar length in milliseconds
+                y=[r["fold"]],
+                x=[((pd.Timestamp(end) - pd.Timestamp(start)).days + 1) * 86_400_000],
+                base=[pd.Timestamp(start)],
+                orientation="h",
+                marker_color=color,
+                name=label,
+                showlegend=label not in shown,
+                hovertemplate=f"{label}: {pd.Timestamp(start).date()} – {pd.Timestamp(end).date()}"
+                "<extra></extra>",
+            )
+            shown.add(label)
+    fig.update_xaxes(type="date")
+    return _layout(
+        fig,
+        title,
+        barmode="overlay",
+        height=320,
+        xaxis_title=None,
+        yaxis_title=None,
+        legend={"orientation": "h", "y": -0.2},
+    )
+
+
+def plot_stl(series: pd.Series, period: int = 7, title: str = "") -> go.Figure:
+    """STL decomposition (observed, trend, seasonal, residual) of a date-indexed series."""
+    from statsmodels.tsa.seasonal import STL
+
+    res = STL(series, period=period, robust=True).fit()
+    parts = {
+        "observed": series,
+        "trend": res.trend,
+        "seasonal": res.seasonal,
+        "residual": res.resid,
+    }
+    fig = make_subplots(
+        rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.04, subplot_titles=list(parts)
+    )
+    for i, (name, values) in enumerate(parts.items(), start=1):
+        fig.add_scatter(
+            x=series.index,
+            y=values,
+            mode="lines",
+            name=name,
+            line={"width": 1, "color": "#1d3557"},
+            row=i,
+            col=1,
+        )
+    return _layout(fig, title, height=650, showlegend=False)
+
+
+def plot_acf_pacf(y: pd.Series, lags: int = 35, title: str = "") -> go.Figure:
+    """ACF and PACF bars with the approximate 95% band (±1.96 / sqrt(n))."""
+    from statsmodels.tsa.stattools import acf, pacf
+
+    values = pd.Series(y).dropna().to_numpy()
+    band = 1.96 / len(values) ** 0.5
+    fig = make_subplots(rows=1, cols=2, subplot_titles=["ACF", "PACF"])
+    for col, vals in enumerate([acf(values, nlags=lags), pacf(values, nlags=lags)], start=1):
+        lag_idx = list(range(1, lags + 1))
+        colors = ["#e76f51" if k % 7 == 0 else "#457b9d" for k in lag_idx]
+        fig.add_bar(x=lag_idx, y=vals[1:], marker_color=colors, row=1, col=col)
+        for sign in (1, -1):
+            fig.add_hline(y=sign * band, line_dash="dot", line_color="#6c757d", row=1, col=col)
+    fig.update_xaxes(title_text="lag (hari) — oranye = kelipatan 7")
+    return _layout(fig, title, height=340, showlegend=False)
+
+
+def plot_forecast_vs_actual(
+    history: pd.DataFrame, actual: pd.DataFrame, preds: pd.DataFrame, title: str = ""
+) -> go.Figure:
+    """History + actual validation values + one line per model forecast.
+
+    Args:
+        history: ``date, sales`` before the cutoff.
+        actual: ``date, y_true`` in the validation window.
+        preds: ``date, model, y_pred`` in the validation window.
+    """
+    fig = go.Figure()
+    fig.add_scatter(
+        x=history["date"],
+        y=history["sales"],
+        mode="lines",
+        name="history",
+        line={"color": "#adb5bd", "width": 1},
+    )
+    fig.add_scatter(
+        x=actual["date"],
+        y=actual["y_true"],
+        mode="lines+markers",
+        name="aktual",
+        line={"color": "#1d3557", "width": 2},
+        marker={"size": 4},
+    )
+    for model, g in preds.groupby("model", sort=False):
+        fig.add_scatter(
+            x=g["date"],
+            y=g["y_pred"],
+            mode="lines",
+            name=model,
+            line={"color": MODEL_COLORS.get(model), "width": 2, "dash": "dash"},
+        )
+    return _layout(
+        fig,
+        title,
+        height=360,
+        xaxis_title=None,
+        yaxis_title="unit / hari",
+        legend={"orientation": "h", "y": -0.2},
+    )
+
+
+def plot_leaderboard(
+    board: pd.DataFrame, metric: str, title: str = "", benchmark: str | None = None
+) -> go.Figure:
+    """Horizontal bars of ``<metric>_mean`` with ±std error bars, best model on top.
+
+    Args:
+        board: Rows from ``leaderboard_cv.csv`` for one level/subset.
+        benchmark: Model name drawn as a dashed reference line.
+    """
+    b = board.sort_values(f"{metric}_mean", ascending=False)
+    fig = go.Figure(
+        go.Bar(
+            x=b[f"{metric}_mean"],
+            y=b["model"],
+            orientation="h",
+            error_x={"type": "data", "array": b[f"{metric}_std"].fillna(0)},
+            marker_color=[MODEL_COLORS.get(m, "#457b9d") for m in b["model"]],
+            text=b[f"{metric}_mean"].map(lambda v: f"{v:.3f}"),
+            textposition="inside",
+        )
+    )
+    if benchmark is not None and benchmark in set(b["model"]):
+        ref = float(b.loc[b["model"] == benchmark, f"{metric}_mean"].iloc[0])
+        fig.add_vline(
+            x=ref,
+            line_dash="dash",
+            line_color="#e63946",
+            annotation_text=f"benchmark ({benchmark})",
+            annotation_position="top",
+        )
+    return _layout(
+        fig,
+        title,
+        xaxis_title=f"{metric.upper()} (rata-rata ± std 4 fold)",
+        yaxis_title=None,
+        height=max(280, 45 * len(b) + 120),
+        showlegend=False,
+    )
+
+
+def plot_metric_by_group(
+    df: pd.DataFrame, group: str, value: str, title: str = "", axis_title: str = ""
+) -> go.Figure:
+    """Grouped bars: ``value`` per ``group`` (e.g. demand class), one colour per model."""
+    fig = px.bar(
+        df,
+        x=group,
+        y=value,
+        color="model",
+        barmode="group",
+        color_discrete_map=MODEL_COLORS,
+        text_auto=".2f",
+    )
+    return _layout(
+        fig, title, xaxis_title=None, yaxis_title=axis_title or value, legend_title=None, height=400
+    )
+
+
 def save_png(
     fig: go.Figure, name: str, config: dict[str, Any], scale: float = 2.0, width: int = 1000
 ) -> Path:

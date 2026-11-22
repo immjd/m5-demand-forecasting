@@ -47,3 +47,41 @@ def test_plot_helpers_return_figures() -> None:
         plots.plot_store_comparison(stores, "mean_daily_units", highlight="CA_1"),
     ]
     assert all(isinstance(f, go.Figure) for f in figs)
+
+
+def test_model_plot_helpers_return_figures() -> None:
+    dates = pd.date_range("2015-01-01", periods=120)
+    y = pd.Series(np.tile([5.0, 3, 3, 3, 4, 6, 8], 18)[:120], index=dates)
+    folds = pd.DataFrame(
+        {
+            "fold": ["F1", "TEST"],
+            "train_start": [dates[0], dates[0]],
+            "train_end": [dates[60], dates[90]],
+            "valid_start": [dates[61], dates[91]],
+            "valid_end": [dates[74], dates[104]],
+        }
+    )
+    history = pd.DataFrame({"date": dates[:90], "sales": y.iloc[:90].to_numpy()})
+    actual = pd.DataFrame({"date": dates[90:], "y_true": y.iloc[90:].to_numpy()})
+    preds = pd.concat(
+        [actual.rename(columns={"y_true": "y_pred"}).assign(model=m) for m in ["ets", "prophet"]]
+    )
+    board = pd.DataFrame(
+        {"model": ["ets", "moving_average"], "rmsse_mean": [0.8, 0.9], "rmsse_std": [0.1, 0.05]}
+    )
+    by_class = pd.DataFrame(
+        {
+            "demand_class": ["smooth", "lumpy"] * 2,
+            "model": ["ets"] * 2 + ["prophet"] * 2,
+            "rmsse": [0.7, 0.9, 0.8, 1.1],
+        }
+    )
+    figs = [
+        plots.plot_backtest_folds(folds),
+        plots.plot_stl(y, period=7),
+        plots.plot_acf_pacf(y, lags=21),
+        plots.plot_forecast_vs_actual(history, actual, preds),
+        plots.plot_leaderboard(board, "rmsse", benchmark="moving_average"),
+        plots.plot_metric_by_group(by_class, "demand_class", "rmsse"),
+    ]
+    assert all(isinstance(f, go.Figure) for f in figs)

@@ -1,0 +1,81 @@
+{
+  "agg": {
+    "CA_1": "(2,1,2)(1,1,1)",
+    "FOODS": "(1,1,2)(0,1,1)",
+    "FOODS_1": "(1,1,2)(1,1,1)",
+    "FOODS_2": "(1,1,2)(1,1,1)",
+    "FOODS_3": "(2,1,2)(0,1,1)",
+    "HOBBIES": "(0,1,2)(1,1,1)",
+    "HOBBIES_1": "(1,1,2)(1,1,1)",
+    "HOBBIES_2": "(0,1,2)(0,1,1)",
+    "HOUSEHOLD": "(2,1,2)(0,1,1)",
+    "HOUSEHOLD_1": "(0,1,2)(1,1,1)",
+    "HOUSEHOLD_2": "(1,2,2)(0,1,1)"
+  },
+  "item_class": {
+    "smooth": "(1,1,2)(1,1,1)",
+    "erratic": "(2,0,2)(0,1,1)",
+    "intermittent": "(2,1,2)(1,0,1)",
+    "lumpy": "(2,0,2)(1,1,1)"
+  },
+  "meta": {
+    "fold": "F1",
+    "train_d": [
+      1072,
+      1801
+    ],
+    "n_orders": 216,
+    "selection_items": {
+      "smooth": [
+        "FOODS_2_164",
+        "FOODS_2_197",
+        "FOODS_3_232",
+        "FOODS_3_634",
+        "HOBBIES_1_337",
+        "HOUSEHOLD_1_082",
+        "HOUSEHOLD_1_096",
+        "HOUSEHOLD_1_234",
+        "HOUSEHOLD_1_339",
+        "HOUSEHOLD_1_540"
+      ],
+      "erratic": [
+        "FOODS_3_015",
+        "FOODS_3_205",
+        "FOODS_3_273",
+        "FOODS_3_319",
+        "FOODS_3_346",
+        "FOODS_3_455",
+        "FOODS_3_526",
+        "FOODS_3_753",
+        "HOBBIES_1_015",
+        "HOBBIES_1_016"
+      ],
+      "intermittent": [
+        "FOODS_2_122",
+        "FOODS_2_358",
+        "FOODS_3_286",
+        "FOODS_3_710",
+        "HOBBIES_1_193",
+        "HOBBIES_2_027",
+        "HOUSEHOLD_1_182",
+        "HOUSEHOLD_1_287",
+        "HOUSEHOLD_2_063",
+        "HOUSEHOLD_2_264"
+      ],
+      "lumpy": [
+        "FOODS_1_190",
+        "FOODS_3_007",
+        "FOODS_3_024",
+        "FOODS_3_056",
+        "FOODS_3_519",
+        "FOODS_3_660",
+        "FOODS_3_665",
+        "HOBBIES_1_295",
+        "HOUSEHOLD_1_374",
+        "HOUSEHOLD_2_354"
+      ]
+    },
+    "runtime_sec": 639.9,
+    "timestamp": "2026-11-22T17:34:31"
+  }
+}

@@ -15,6 +15,17 @@ from forecasting.models.base import ForecastModel
 TARGET = "sales"
 SALES_LONG_FILE = "sales_long.parquet"
 AGGREGATES_FILE = "aggregates.parquet"
+CALENDAR_COLS = [
+    "wm_yr_wk",
+    "wday",
+    "month",
+    "year",
+    "event_name_1",
+    "event_type_1",
+    "event_name_2",
+    "event_type_2",
+    "snap",
+]
 
 
 @dataclass(frozen=True)
@@ -68,6 +79,13 @@ def load_level_data(config: dict[str, Any], level: str, include_test: bool = Fal
         path = resolve_path(config, "processed") / AGGREGATES_FILE
         data = pd.read_parquet(path, filters=[("d", "<=", last_d)])
         data = data.rename(columns={"level": "agg_level"})
+        # Calendar covariates (events, SNAP) are shared by all series of the store.
+        calendar = pd.read_parquet(
+            resolve_path(config, "interim") / SALES_LONG_FILE,
+            columns=["d", *CALENDAR_COLS],
+            filters=[("d", "<=", last_d)],
+        ).drop_duplicates("d")
+        data = data.merge(calendar, on="d", how="left", validate="many_to_one")
     else:
         raise ValueError(f"Unknown level {level!r}; expected 'item' or 'agg'")
     return data.sort_values(["series_id", "d"]).reset_index(drop=True)

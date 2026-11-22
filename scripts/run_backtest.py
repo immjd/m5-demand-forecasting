@@ -1,9 +1,11 @@
 """Phases 3-5: run one model through the rolling-origin backtest and update the leaderboard.
 
+Statistical models (ets, sarimax, prophet) run on the 200-item sample at item level.
+
 Usage (from the project root):
     python -m scripts.run_backtest --model seasonal_naive --level item
-    python -m scripts.run_backtest --model seasonal_naive --level agg
-    python -m scripts.run_backtest --model naive --level item --sample 50   # smoke test
+    python -m scripts.run_backtest --model ets --level agg
+    python -m scripts.run_backtest --model prophet --level item --sample 10   # smoke test
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ import pandas as pd
 
 from forecasting.config import load_config, resolve_path
 from forecasting.evaluation.metrics import evaluate_fold
-from forecasting.models.baselines import MODEL_REGISTRY
+from forecasting.models.registry import ALL_MODELS, STATISTICAL, make_model
 from forecasting.validation.backtest import generate_folds, load_level_data, run_backtest
 
 METRICS_FILE = "metrics_by_fold.csv"
@@ -97,7 +99,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--model", required=True, choices=sorted(MODEL_REGISTRY))
+    parser.add_argument("--model", required=True, choices=ALL_MODELS)
     parser.add_argument("--level", default="item", choices=["item", "agg"])
     parser.add_argument(
         "--sample",
@@ -119,6 +121,12 @@ def main(argv: list[str] | None = None) -> None:
     data = load_level_data(config, args.level)
     subsets = subsets_for(args.level, config)
 
+    if args.model in STATISTICAL and args.level == "item":
+        # Statistical models run on the 200-item sample only (PROJECT_PLAN section 2).
+        sample_ids = subsets["stat_sample"]
+        data = data.loc[data["series_id"].astype(str).isin(sample_ids)]
+        subsets = {"stat_sample": sample_ids}
+
     if args.sample:
         rng = np.random.default_rng(config["seed"])
         ids = rng.choice(
@@ -139,7 +147,7 @@ def main(argv: list[str] | None = None) -> None:
         len(data),
         [f.name for f in folds],
     )
-    result = run_backtest(MODEL_REGISTRY[args.model], data, folds)
+    result = run_backtest(make_model(args.model, args.level, config), data, folds)
     metrics = score(result.preds, data, folds, subsets, config)
     metrics.insert(0, "model", args.model)
     metrics.insert(1, "level", args.level)
