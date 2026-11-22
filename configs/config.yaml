@@ -23,6 +23,9 @@ backtest:
     - [1885, 1886, 1913]
   test: [1913, 1914, 1941]  # touched ONCE, in Phase 6
 
+evaluation:
+  weight_window_days: 28  # WRMSSE-lite weights = revenue of the last N days before each cutoff
+
 demand_class:             # Syntetos-Boylan, computed on data <= first fold train_end
   adi_threshold: 1.32
   cv2_threshold: 0.49
