@@ -1,11 +1,15 @@
 """Phases 3-5: run one model through the rolling-origin backtest and update the leaderboard.
 
-Statistical models (ets, sarimax, prophet) run on the 200-item sample at item level.
+* Statistical models (ets, sarimax, prophet) run on the 200-item sample at item level.
+* LightGBM variants (lgbm_*) run at item level on the feature table; their item
+  forecasts are also summed bottom-up and scored at aggregate level.
 
 Usage (from the project root):
     python -m scripts.run_backtest --model seasonal_naive --level item
     python -m scripts.run_backtest --model ets --level agg
-    python -m scripts.run_backtest --model prophet --level item --sample 10   # smoke test
+    python -m scripts.run_backtest --model lgbm_tweedie
+    python -m scripts.run_backtest --model prophet --level item --sample 10      # smoke test
+    python -m scripts.run_backtest --model lgbm_tweedie --folds F1 --no-save    # timing test
 """
 
 from __future__ import annotations
@@ -23,9 +27,17 @@ import numpy as np
 import pandas as pd
 
 from forecasting.config import load_config, resolve_path
+from forecasting.data.aggregate import bottom_up
 from forecasting.evaluation.metrics import evaluate_fold
-from forecasting.models.registry import ALL_MODELS, STATISTICAL, make_model
-from forecasting.validation.backtest import generate_folds, load_level_data, run_backtest
+from forecasting.models.registry import ALL_MODELS, LGBM_VARIANTS, STATISTICAL, make_model
+from forecasting.validation.backtest import (
+    BacktestResult,
+    Fold,
+    generate_folds,
+    load_feature_data,
+    load_level_data,
+    run_backtest,
+)
 
 METRICS_FILE = "metrics_by_fold.csv"
 LEADERBOARD_FILE = "leaderboard_cv.csv"
@@ -71,6 +83,23 @@ def score(preds: pd.DataFrame, data: pd.DataFrame, folds, subsets, config) -> pd
     return pd.DataFrame(rows)
 
 
+def score_bottom_up(
+    result: BacktestResult, items: pd.DataFrame, folds: list[Fold], config: dict[str, Any]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Sum item forecasts into the 11 aggregate series and score them at aggregate level."""
+    agg = load_level_data(config, "agg")
+    meta = items[["series_id", "dept_id", "cat_id"]].drop_duplicates("series_id")
+    meta = meta.assign(store_id=config["scope"]["store_id"])
+    agg_pred = bottom_up(result.preds, meta)
+    truth = agg[["series_id", "d", "sales", "is_closed"]].assign(
+        series_id=agg["series_id"].astype(str)
+    )
+    agg_pred = agg_pred.merge(truth, on=["series_id", "d"], how="left", validate="many_to_one")
+    agg_pred = agg_pred.rename(columns={"sales": "y_true"})
+    metrics = score(agg_pred, agg, folds, {"all": None}, config)
+    return agg_pred, metrics
+
+
 def update_results(new_rows: pd.DataFrame, results_dir: Path) -> pd.DataFrame:
     """Replace previous rows of the same (model, level), then rebuild the leaderboard."""
     path = results_dir / METRICS_FILE
@@ -95,6 +124,15 @@ def update_results(new_rows: pd.DataFrame, results_dir: Path) -> pd.DataFrame:
     return board
 
 
+def _stamp(metrics: pd.DataFrame, model: str, level: str, runtimes: dict, config) -> pd.DataFrame:
+    metrics.insert(0, "model", model)
+    metrics.insert(1, "level", level)
+    metrics["runtime_sec"] = metrics["fold"].map(runtimes)
+    metrics["timestamp"] = datetime.now().isoformat(timespec="seconds")
+    metrics["config_hash"] = config_hash(config)
+    return metrics
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -107,6 +145,8 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Smoke test: N random series, first fold only, nothing saved",
     )
+    parser.add_argument("--folds", nargs="+", default=None, help="Subset of folds, e.g. F1 F2")
+    parser.add_argument("--no-save", action="store_true", help="Print metrics only")
     parser.add_argument("--config", type=Path, default=None)
     args = parser.parse_args(argv)
     logging.basicConfig(
@@ -117,9 +157,15 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     config = load_config(args.config)
+    is_lgbm = args.model in LGBM_VARIANTS
+    if is_lgbm and args.level != "item":
+        parser.error("LightGBM runs at item level; aggregate scores come from bottom-up")
     folds = generate_folds(config)
-    data = load_level_data(config, args.level)
+    if args.folds:
+        folds = [f for f in folds if f.name in args.folds]
+    data = load_feature_data(config) if is_lgbm else load_level_data(config, args.level)
     subsets = subsets_for(args.level, config)
+    save = not (args.sample or args.no_save or args.folds)
 
     if args.model in STATISTICAL and args.level == "item":
         # Statistical models run on the 200-item sample only (PROJECT_PLAN section 2).
@@ -135,33 +181,42 @@ def main(argv: list[str] | None = None) -> None:
         data = data.loc[data["series_id"].astype(str).isin(ids)]
         folds = folds[:1]
         subsets = {"all": None}
-        log.info(
-            "SMOKE TEST: %d series, fold %s only, results are NOT saved", args.sample, folds[0].name
-        )
+        log.info("SMOKE TEST: %d series, fold %s only", args.sample, folds[0].name)
+    if not save:
+        log.info("Results are NOT saved (smoke/timing run)")
 
     log.info(
-        "Model=%s level=%s | %d series | %d rows | folds=%s",
+        "Model=%s level=%s | %d series | %s rows | folds=%s",
         args.model,
         args.level,
         data["series_id"].nunique(),
-        len(data),
+        f"{len(data):,}",
         [f.name for f in folds],
     )
-    result = run_backtest(make_model(args.model, args.level, config), data, folds)
-    metrics = score(result.preds, data, folds, subsets, config)
-    metrics.insert(0, "model", args.model)
-    metrics.insert(1, "level", args.level)
-    metrics["runtime_sec"] = metrics["fold"].map(result.runtime_sec)
-    metrics["timestamp"] = datetime.now().isoformat(timespec="seconds")
-    metrics["config_hash"] = config_hash(config)
+    result = run_backtest(
+        make_model(args.model, args.level, config), data, folds, keep_models=is_lgbm
+    )
+    metrics = _stamp(
+        score(result.preds, data, folds, subsets, config),
+        args.model,
+        args.level,
+        result.runtime_sec,
+        config,
+    )
+    agg_pred = None
+    if is_lgbm and not args.sample:
+        agg_pred, agg_metrics = score_bottom_up(result, data, folds, config)
+        metrics = pd.concat(
+            [metrics, _stamp(agg_metrics, args.model, "agg", result.runtime_sec, config)],
+            ignore_index=True,
+        )
 
-    with pd.option_context("display.width", 140, "display.float_format", "{:.4f}".format):
+    with pd.option_context("display.width", 160, "display.float_format", "{:.4f}".format):
         log.info(
             "Metrics per fold:\n%s",
             metrics.drop(columns=["timestamp", "config_hash"]).to_string(index=False),
         )
-
-    if args.sample:
+    if not save:
         return
 
     results_dir = resolve_path(config, "results")
@@ -169,11 +224,18 @@ def main(argv: list[str] | None = None) -> None:
     preds_dir.mkdir(parents=True, exist_ok=True)
     preds_path = preds_dir / f"{args.model}_{args.level}.parquet"
     result.preds.to_parquet(preds_path, index=False)
+    if agg_pred is not None:
+        agg_pred.to_parquet(preds_dir / f"{args.model}_agg.parquet", index=False)
+    if is_lgbm:
+        # gain importance per fold, plus the early-stopping iteration count per fold
+        imp = pd.DataFrame({f: m.importance_ for f, m in result.models.items()})
+        imp.loc["__best_iteration__"] = [m.best_iteration_ for m in result.models.values()]
+        imp.to_csv(results_dir / f"importance_{args.model}.csv", index_label="feature")
     board = update_results(metrics, results_dir)
 
-    mine = board[(board["model"] == args.model) & (board["level"] == args.level)]
-    cols = ["subset", "wrmsse_mean", "wrmsse_std", "rmsse_mean", "wape_mean", "bias_mean"]
-    with pd.option_context("display.width", 140, "display.float_format", "{:.4f}".format):
+    mine = board[board["model"] == args.model]
+    cols = ["level", "subset", "wrmsse_mean", "wrmsse_std", "rmsse_mean", "wape_mean", "bias_mean"]
+    with pd.option_context("display.width", 160, "display.float_format", "{:.4f}".format):
         log.info(
             "CV summary (mean over %d folds):\n%s", len(folds), mine[cols].to_string(index=False)
         )

@@ -130,3 +130,35 @@ def evaluate_fold(
         "n_series": int(p["series_id"].nunique()),
         "n_scored": int(rmsse.notna().sum()),
     }
+
+
+# ---------------------------------------------------------------- breakdowns
+def per_series_rmsse(preds: pd.DataFrame, data: pd.DataFrame, folds: list[Any]) -> pd.DataFrame:
+    """RMSSE per (fold, series) on open days; ``folds`` need ``.name`` and ``.train_end``."""
+    rows = []
+    for fold in folds:
+        p = preds.loc[(preds["fold"] == fold.name) & (preds["is_closed"] == 0)]
+        if p.empty:
+            continue
+        scales = compute_scales(data.loc[data["d"] <= fold.train_end], fold.train_end)
+        r = rmsse_per_series(p, scales).reset_index()
+        rows.append(r.assign(fold=fold.name))
+    return pd.concat(rows, ignore_index=True)[["fold", "series_id", "rmsse"]]
+
+
+def metrics_by_horizon(preds: pd.DataFrame, folds: list[Any]) -> pd.DataFrame:
+    """WAPE and bias per horizon day ``h = d - train_end`` (1..H), pooled over folds."""
+    end = {f.name: f.train_end for f in folds}
+    p = preds.loc[preds["is_closed"] == 0]
+    h = p["d"].astype(int) - p["fold"].map(end).astype(int)
+    out = (
+        p.assign(h=h)
+        .groupby("h")
+        .apply(
+            lambda g: pd.Series(
+                {"wape": wape(g["y_true"], g["y_pred"]), "bias": bias(g["y_true"], g["y_pred"])}
+            ),
+            include_groups=False,
+        )
+    )
+    return out.reset_index()

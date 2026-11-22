@@ -43,3 +43,26 @@ def build_aggregates(df: pd.DataFrame) -> pd.DataFrame:
     agg["series_id"] = agg["series_id"].astype("category")
     agg = agg.sort_values(["level", "series_id", "d"]).reset_index(drop=True)
     return agg[["level", "series_id", "d", "date", "sales", "is_closed"]]
+
+
+def bottom_up(item_preds: pd.DataFrame, item_meta: pd.DataFrame) -> pd.DataFrame:
+    """Sum item-level forecasts into the 11 aggregate series (bottom-up reconciliation).
+
+    Args:
+        item_preds: ``fold, series_id (item), d, y_pred``.
+        item_meta: One row per item with ``series_id, store_id, cat_id, dept_id``.
+
+    Returns:
+        ``fold, series_id (aggregate), d, y_pred``.
+    """
+    meta = item_meta.assign(series_id=item_meta["series_id"].astype(str))
+    p = item_preds.assign(series_id=item_preds["series_id"].astype(str)).merge(
+        meta, on="series_id", how="left", validate="many_to_one"
+    )
+    parts = []
+    for _, key in LEVELS:
+        s = p.groupby(["fold", key, "d"], observed=True)["y_pred"].sum().reset_index()
+        parts.append(s.rename(columns={key: "series_id"}))
+    out = pd.concat(parts, ignore_index=True)
+    out["series_id"] = out["series_id"].astype(str)
+    return out

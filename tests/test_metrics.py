@@ -104,3 +104,35 @@ def test_evaluate_fold_excludes_closed_days() -> None:
     assert m["wape"] == pytest.approx(0.0)
     assert m["rmsse"] == pytest.approx(0.0)
     assert m["n_series"] == 1
+
+
+def test_breakdowns_by_series_and_horizon() -> None:
+    from types import SimpleNamespace
+
+    from forecasting.evaluation.metrics import metrics_by_horizon, per_series_rmsse
+
+    data = pd.DataFrame(
+        {
+            "series_id": "A",
+            "d": range(1, 11),
+            "is_closed": 0,
+            "sales": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+        }
+    )
+    fold = SimpleNamespace(name="F1", train_end=8)
+    preds = pd.DataFrame(
+        {
+            "fold": "F1",
+            "series_id": "A",
+            "d": [9, 10],
+            "is_closed": 0,
+            "y_true": [1, 2],
+            "y_pred": [1.0, 4.0],
+        }
+    )
+    r = per_series_rmsse(preds, data, [fold])
+    # scale = mean squared 1-step diff on d<=8 = 1; forecast MSE = (0 + 4) / 2 = 2
+    assert r.loc[0, "rmsse"] == pytest.approx(np.sqrt(2.0))
+    h = metrics_by_horizon(preds, [fold]).set_index("h")
+    assert h.loc[1, "wape"] == 0.0
+    assert h.loc[2, "bias"] == pytest.approx(1.0)

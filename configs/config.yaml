@@ -54,6 +54,27 @@ statistical:
 lgbm:
   objective: tweedie      # compared against poisson & regression in Phase 5
   n_optuna_trials: 30
+  lags: [28, 35, 42, 49, 56, 364]        # every target lag >= forecast.min_lag
+  rolling_windows: [7, 14, 28, 56, 112]  # rolling mean/std on the target shifted by min_lag
+  price_momentum_days: 28
+  inner_valid_days: 28    # early stopping on the LAST days of each train fold (never the fold's validation)
+  num_boost_round: 3000
+  early_stopping_rounds: 100
+  refit_full: true        # refit on the full train fold with the best iteration count
+  train_window_days: null # null = all history; an integer keeps only the last N days per fold
+  shap_sample_rows: 5000  # rows sampled (seed) for the SHAP summary in notebook 03
+  params:                 # base LightGBM params (Optuna overrides some of them)
+    learning_rate: 0.05
+    num_leaves: 127
+    min_data_in_leaf: 100
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    lambda_l2: 0.1
+    tweedie_variance_power: 1.1
+    max_bin: 255
+    num_threads: 0        # 0 = LightGBM default (all cores)
+    verbosity: -1
 
 inventory:                # ALL assumptions, documented in README
   review_period_days: 7

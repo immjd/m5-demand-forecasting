@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -272,6 +273,12 @@ MODEL_COLORS = {
     "sarimax": "#2a9d8f",
     "prophet": "#e9c46a",
     "lgbm": "#e76f51",
+    "lgbm_tweedie": "#f4a261",
+    "lgbm_poisson": "#f6bd60",
+    "lgbm_l2": "#b5838d",
+    "lgbm_tuned": "#e63946",
+    "lgbm_no_price": "#9d4edd",
+    "lgbm_no_calendar": "#6d597a",
 }
 
 
@@ -464,6 +471,161 @@ def plot_metric_by_group(
     )
     return _layout(
         fig, title, xaxis_title=None, yaxis_title=axis_title or value, legend_title=None, height=400
+    )
+
+
+def plot_optuna_history(
+    trials: pd.DataFrame, title: str = "", baseline: float | None = None
+) -> go.Figure:
+    """Optuna trials (``number``, ``value``, ``state``) with the running best line."""
+    t = trials.sort_values("number")
+    done = t[t["state"] == "COMPLETE"]
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=done["number"],
+            y=done["value"],
+            mode="markers",
+            name="trial selesai",
+            marker={"color": "#457b9d", "size": 8},
+        )
+    )
+    best = done.set_index("number")["value"].cummin()
+    fig.add_trace(
+        go.Scatter(
+            x=best.index,
+            y=best.values,
+            mode="lines",
+            line_shape="hv",
+            name="terbaik sejauh ini",
+            line={"color": "#e63946", "width": 2},
+        )
+    )
+    pruned = t[t["state"] == "PRUNED"]
+    if len(pruned):
+        y0 = float(done["value"].max()) if len(done) else 0.0
+        fig.add_trace(
+            go.Scatter(
+                x=pruned["number"],
+                y=[y0] * len(pruned),
+                mode="markers",
+                name="di-prune (dihentikan dini)",
+                marker={"symbol": "x", "color": "#adb5bd", "size": 9},
+            )
+        )
+    if baseline is not None:
+        fig.add_hline(
+            y=baseline,
+            line_dash="dash",
+            line_color="#343a40",
+            annotation_text="parameter default",
+            annotation_position="top left",
+        )
+    return _layout(
+        fig,
+        title,
+        xaxis_title="trial",
+        yaxis_title="WRMSSE-lite CV",
+        height=380,
+        legend={"orientation": "h", "y": -0.2},
+    )
+
+
+def plot_importance(imp: pd.DataFrame, top_n: int = 20, title: str = "") -> go.Figure:
+    """Gain share per feature (mean over fold columns, error bar = min-max across folds)."""
+    share = imp / imp.sum()
+    mean = share.mean(axis=1).sort_values(ascending=False).head(top_n)[::-1]
+    lo = mean - share.loc[mean.index].min(axis=1)
+    hi = share.loc[mean.index].max(axis=1) - mean
+    fig = go.Figure(
+        go.Bar(
+            x=mean.values,
+            y=mean.index,
+            orientation="h",
+            marker_color="#e76f51",
+            error_x={
+                "type": "data",
+                "symmetric": False,
+                "array": hi.values,
+                "arrayminus": lo.values,
+            },
+        )
+    )
+    fig.update_xaxes(tickformat=".0%")
+    return _layout(
+        fig,
+        title,
+        xaxis_title="porsi total gain (rata-rata 4 fold)",
+        yaxis_title=None,
+        height=max(320, 24 * len(mean) + 120),
+        showlegend=False,
+    )
+
+
+def plot_shap_summary(
+    values: pd.DataFrame, X: pd.DataFrame, top_n: int = 15, title: str = "", seed: int = 42
+) -> go.Figure:
+    """Beeswarm-style SHAP summary: one dot per row, colour = feature value percentile.
+
+    Categorical features have no natural order and are drawn in grey.
+    """
+    order = list(values.abs().mean().sort_values(ascending=False).head(top_n).index[::-1])
+    rng = np.random.default_rng(seed)
+    fig = go.Figure()
+    for i, feat in enumerate(order):
+        x = values[feat].to_numpy()
+        col = X[feat]
+        if isinstance(col.dtype, pd.CategoricalDtype) or not pd.api.types.is_numeric_dtype(col):
+            marker = {"color": "#adb5bd", "size": 4, "opacity": 0.5}
+        else:
+            pct = col.rank(pct=True).fillna(0.5).to_numpy()
+            marker = {
+                "color": pct,
+                "colorscale": "RdBu_r",
+                "cmin": 0,
+                "cmax": 1,
+                "size": 4,
+                "opacity": 0.6,
+                "showscale": i == len(order) - 1,
+                "colorbar": {
+                    "title": "nilai fitur<br>(persentil)",
+                    "tickvals": [0, 1],
+                    "ticktext": ["rendah", "tinggi"],
+                },
+            }
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=i + rng.uniform(-0.3, 0.3, len(x)),
+                mode="markers",
+                marker=marker,
+                name=feat,
+                showlegend=False,
+            )
+        )
+    fig.add_vline(x=0, line_color="#343a40", line_width=1)
+    fig.update_yaxes(tickvals=list(range(len(order))), ticktext=order)
+    return _layout(
+        fig,
+        title,
+        xaxis_title="nilai SHAP (skala log prediksi)",
+        yaxis_title=None,
+        height=max(380, 30 * len(order) + 140),
+    )
+
+
+def plot_metric_by_horizon(
+    df: pd.DataFrame, value: str, title: str = "", axis_title: str = ""
+) -> go.Figure:
+    """Line per model of ``value`` against horizon day ``h``."""
+    fig = px.line(df, x="h", y=value, color="model", markers=True, color_discrete_map=MODEL_COLORS)
+    return _layout(
+        fig,
+        title,
+        xaxis_title="hari ke-h setelah cutoff",
+        yaxis_title=axis_title or value,
+        legend_title=None,
+        height=380,
     )
 
 

@@ -1,0 +1,23 @@
+{
+  "objective": "tweedie",
+  "params": {
+    "num_leaves": 93,
+    "learning_rate": 0.021164670667238795,
+    "min_data_in_leaf": 211,
+    "feature_fraction": 0.7672142810403759,
+    "bagging_fraction": 0.8717885027831344,
+    "lambda_l2": 0.00822595407005772,
+    "tweedie_variance_power": 1.3748439632313134
+  },
+  "cv_wrmsse": 0.8010350930347274,
+  "fold_wrmsse": [
+    0.7909459002058781,
+    0.8094798518708941,
+    0.8069293411929319,
+    0.7967852788692058
+  ],
+  "trial": 28,
+  "n_trials": 30,
+  "n_pruned": 5,
+  "timestamp": "2026-11-22T23:14:48"
+}

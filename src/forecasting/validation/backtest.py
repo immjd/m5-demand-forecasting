@@ -15,6 +15,8 @@ from forecasting.models.base import ForecastModel
 TARGET = "sales"
 SALES_LONG_FILE = "sales_long.parquet"
 AGGREGATES_FILE = "aggregates.parquet"
+FEATURES_FILE = "features.parquet"
+FEATURES_TEST_FILE = "features_with_test.parquet"
 CALENDAR_COLS = [
     "wm_yr_wk",
     "wday",
@@ -52,6 +54,7 @@ class BacktestResult:
 
     preds: pd.DataFrame
     runtime_sec: dict[str, float] = field(default_factory=dict)
+    models: dict[str, ForecastModel] = field(default_factory=dict)
 
 
 def generate_folds(config: dict[str, Any]) -> list[Fold]:
@@ -95,13 +98,15 @@ def run_backtest(
     model_factory: Callable[[], ForecastModel],
     data: pd.DataFrame,
     folds: list[Fold],
+    keep_models: bool = False,
 ) -> BacktestResult:
     """Fit a fresh model per fold and predict its validation window.
 
     The target column is removed from the validation frame before ``predict``,
-    and predictions are clipped at 0.
+    and predictions are clipped at 0. With ``keep_models`` the fitted models are
+    returned too (e.g. for feature importance).
     """
-    parts, runtimes = [], {}
+    parts, runtimes, models = [], {}, {}
     for fold in folds:
         train = data.loc[data["d"] <= fold.train_end]
         window = data.loc[data["d"].between(fold.valid_start, fold.valid_end)]
@@ -126,5 +131,22 @@ def run_backtest(
         out.insert(0, "fold", fold.name)
         out["model"] = model.name
         parts.append(out)
+        if keep_models:
+            models[fold.name] = model
 
-    return BacktestResult(pd.concat(parts, ignore_index=True), runtimes)
+    return BacktestResult(pd.concat(parts, ignore_index=True), runtimes, models)
+
+
+def load_feature_data(config: dict[str, Any], include_test: bool = False) -> pd.DataFrame:
+    """Load the LightGBM feature table built by ``scripts.build_features``.
+
+    By default rows after the last validation day are dropped (test window excluded).
+    """
+    name = FEATURES_TEST_FILE if include_test else FEATURES_FILE
+    path = resolve_path(config, "processed") / name
+    if not path.exists():
+        flag = " --include-test" if include_test else ""
+        raise FileNotFoundError(f"{path} missing: run `python -m scripts.build_features{flag}`")
+    last_d = (get_test_fold(config) if include_test else generate_folds(config)[-1]).valid_end
+    data = pd.read_parquet(path, filters=[("d", "<=", last_d)])
+    return data.sort_values(["series_id", "d"]).reset_index(drop=True)

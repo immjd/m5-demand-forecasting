@@ -85,3 +85,31 @@ def test_model_plot_helpers_return_figures() -> None:
         plots.plot_metric_by_group(by_class, "demand_class", "rmsse"),
     ]
     assert all(isinstance(f, go.Figure) for f in figs)
+
+
+def test_lgbm_plot_helpers_return_figures() -> None:
+    rng = np.random.default_rng(0)
+    trials = pd.DataFrame(
+        {
+            "number": range(5),
+            "value": [0.9, 0.85, np.nan, 0.84, 0.86],
+            "state": ["COMPLETE", "COMPLETE", "PRUNED", "COMPLETE", "COMPLETE"],
+        }
+    )
+    imp = pd.DataFrame(rng.uniform(1, 10, (4, 2)), index=list("abcd"), columns=["F1", "F2"])
+    X = pd.DataFrame({"a": rng.normal(size=50), "b": pd.Categorical(rng.choice(["x", "y"], 50))})
+    vals = pd.DataFrame(rng.normal(size=(50, 2)), columns=["a", "b"])
+    hz = pd.DataFrame(
+        {
+            "h": [1, 2, 1, 2],
+            "model": ["ets", "ets", "lgbm_tuned", "lgbm_tuned"],
+            "wape": [0.7, 0.72, 0.65, 0.66],
+        }
+    )
+    figs = [
+        plots.plot_optuna_history(trials, baseline=0.87),
+        plots.plot_importance(imp, top_n=3),
+        plots.plot_shap_summary(vals, X),
+        plots.plot_metric_by_horizon(hz, "wape"),
+    ]
+    assert all(isinstance(f, go.Figure) for f in figs)
