@@ -1,8 +1,33 @@
+# Virtual environment
 .venv/
-data/
+
+# Data (large, and the Kaggle competition license forbids redistribution)
+# Anchored to the repo root so src/forecasting/data/ (code) is NOT ignored
+/data/
+
+# Claude Code planning files (not for the public repo)
 CLAUDE.md
 CLAUDE.local.md
 docs/
 .claude/
+
+# Python & notebooks
 __pycache__/
+*.pyc
 .ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Models & large artifacts
+*.pkl
+*.joblib
+reports/results/preds/
+
+# Logs from long-running processes
+logs/
+
+# Misc
+.env
+.DS_Store
+Thumbs.db

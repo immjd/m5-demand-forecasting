@@ -1,0 +1,38 @@
+seed: 42
+
+paths:
+  raw: data/raw
+  interim: data/interim
+  processed: data/processed
+  results: reports/results
+  figures: reports/figures
+
+scope:
+  store_id: CA_1          # final choice made in Phase 2 (see DECISIONS D-002)
+  history_start_d: 1      # switch to 1000 if RAM is limited
+
+forecast:
+  horizon: 28
+  min_lag: 28             # direct strategy: every target lag >= horizon
+
+backtest:
+  folds:                  # [train_end, valid_start, valid_end] as d_ indices
+    - [1801, 1802, 1829]
+    - [1829, 1830, 1857]
+    - [1857, 1858, 1885]
+    - [1885, 1886, 1913]
+  test: [1913, 1914, 1941]  # touched ONCE, in Phase 6
+
+statistical:
+  item_sample_size: 200   # 50 per demand class
+  train_window_days: 730  # ARIMA/Prophet trained on the last 2 years for speed
+
+lgbm:
+  objective: tweedie      # compared against poisson & regression in Phase 5
+  n_optuna_trials: 30
+
+inventory:                # ALL assumptions, documented in README
+  review_period_days: 7
+  lead_time_days: 3
+  service_levels: [0.80, 0.85, 0.90, 0.95, 0.975, 0.99]
+  holding_cost_rate_annual: 0.25   # fraction of item value per year
