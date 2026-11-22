@@ -162,3 +162,24 @@ def metrics_by_horizon(preds: pd.DataFrame, folds: list[Any]) -> pd.DataFrame:
         )
     )
     return out.reset_index()
+
+
+def metrics_by_group(preds: pd.DataFrame, by: str | list[str]) -> pd.DataFrame:
+    """WAPE, bias, rows and actual volume per group of open-day predictions.
+
+    ``preds`` must already carry the grouping column(s), e.g. ``dept_id`` or an
+    event flag merged from the calendar.
+    """
+    p = preds.loc[preds["is_closed"] == 0]
+    out = p.groupby(by, observed=True).apply(
+        lambda g: pd.Series(
+            {
+                "wape": wape(g["y_true"], g["y_pred"]),
+                "bias": bias(g["y_true"], g["y_pred"]),
+                "n_rows": float(len(g)),
+                "volume": float(g["y_true"].sum()),
+            }
+        ),
+        include_groups=False,
+    )
+    return out.reset_index()

@@ -113,3 +113,10 @@ def test_lgbm_plot_helpers_return_figures() -> None:
         plots.plot_metric_by_horizon(hz, "wape"),
     ]
     assert all(isinstance(f, go.Figure) for f in figs)
+
+
+def test_plot_heatmap_returns_figure() -> None:
+    table = pd.DataFrame(
+        [[0.7, np.nan], [0.9, 1.1]], index=["ets", "sarimax"], columns=["smooth", "lumpy"]
+    )
+    assert isinstance(plots.plot_heatmap(table, zmid=1.0), go.Figure)

@@ -84,10 +84,17 @@ def score(preds: pd.DataFrame, data: pd.DataFrame, folds, subsets, config) -> pd
 
 
 def score_bottom_up(
-    result: BacktestResult, items: pd.DataFrame, folds: list[Fold], config: dict[str, Any]
+    result: BacktestResult,
+    items: pd.DataFrame,
+    folds: list[Fold],
+    config: dict[str, Any],
+    include_test: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Sum item forecasts into the 11 aggregate series and score them at aggregate level."""
-    agg = load_level_data(config, "agg")
+    """Sum item forecasts into the 11 aggregate series and score them at aggregate level.
+
+    ``include_test`` is only set by ``scripts.final_test`` (Phase 6).
+    """
+    agg = load_level_data(config, "agg", include_test=include_test)
     meta = items[["series_id", "dept_id", "cat_id"]].drop_duplicates("series_id")
     meta = meta.assign(store_id=config["scope"]["store_id"])
     agg_pred = bottom_up(result.preds, meta)

@@ -629,6 +629,33 @@ def plot_metric_by_horizon(
     )
 
 
+def plot_heatmap(
+    table: pd.DataFrame,
+    title: str = "",
+    fmt: str = ".3f",
+    colorscale: str = "RdYlGn_r",
+    zmid: float | None = None,
+    colorbar_title: str = "",
+) -> go.Figure:
+    """Annotated heatmap of a (rows x columns) table, e.g. model x demand class."""
+    z = table.to_numpy(dtype=float)
+    text = [[("" if np.isnan(v) else format(v, fmt)) for v in row] for row in z]
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            x=[str(c) for c in table.columns],
+            y=[str(i) for i in table.index],
+            text=text,
+            texttemplate="%{text}",
+            colorscale=colorscale,
+            zmid=zmid,
+            colorbar={"title": colorbar_title},
+        )
+    )
+    fig.update_yaxes(autorange="reversed")
+    return _layout(fig, title, height=max(300, 45 * len(table) + 140))
+
+
 def save_png(
     fig: go.Figure, name: str, config: dict[str, Any], scale: float = 2.0, width: int = 1000
 ) -> Path:

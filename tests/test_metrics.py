@@ -136,3 +136,21 @@ def test_breakdowns_by_series_and_horizon() -> None:
     h = metrics_by_horizon(preds, [fold]).set_index("h")
     assert h.loc[1, "wape"] == 0.0
     assert h.loc[2, "bias"] == pytest.approx(1.0)
+
+
+def test_metrics_by_group_skips_closed_days() -> None:
+    from forecasting.evaluation.metrics import metrics_by_group
+
+    preds = pd.DataFrame(
+        {
+            "grp": ["a", "a", "b", "b"],
+            "is_closed": [0, 0, 0, 1],
+            "y_true": [2, 2, 4, 0],
+            "y_pred": [3.0, 1.0, 2.0, 9.0],
+        }
+    )
+    out = metrics_by_group(preds, "grp").set_index("grp")
+    assert out.loc["a", "wape"] == pytest.approx(0.5)
+    assert out.loc["a", "bias"] == pytest.approx(0.0)
+    assert out.loc["b", "bias"] == pytest.approx(-0.5)  # closed row ignored
+    assert out.loc["b", "n_rows"] == 1
