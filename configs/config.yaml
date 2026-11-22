@@ -23,6 +23,15 @@ backtest:
     - [1885, 1886, 1913]
   test: [1913, 1914, 1941]  # touched ONCE, in Phase 6
 
+demand_class:             # Syntetos-Boylan, computed on data <= first fold train_end
+  adi_threshold: 1.32
+  cv2_threshold: 0.49
+  min_nonzero_days: 2     # fewer non-zero days before cutoff -> insufficient_history
+
+eda:
+  stockout_zero_run_days: 14   # zero run this long on a frequently-selling item -> likely stockout
+  revenue_window_days: 364     # window (ending at last fold valid_end) for the Pareto analysis
+
 statistical:
   item_sample_size: 200   # 50 per demand class
   train_window_days: 730  # ARIMA/Prophet trained on the last 2 years for speed

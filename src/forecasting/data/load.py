@@ -86,6 +86,38 @@ def read_prices(raw_dir: Path, store_id: str) -> pd.DataFrame:
     return prices.reset_index(drop=True)
 
 
+def store_overview(config: dict[str, Any], last_d: int, window_days: int = 364) -> pd.DataFrame:
+    """Summarise every store for store selection, using only days ``<= last_d``.
+
+    Metrics per store: number of items, mean daily units over the full history
+    and over the last ``window_days``, year-over-year growth of the last window,
+    share of zero item-days in the last window, and the number of days on which
+    the whole store sold nothing.
+    """
+    path = resolve_path(config, "raw") / SALES_FILE
+    header = pd.read_csv(path, nrows=0).columns
+    d_cols = [c for c in header if c.startswith("d_") and int(c[2:]) <= last_d]
+    wide = pd.read_csv(path, usecols=["store_id", *d_cols], dtype=dict.fromkeys(d_cols, "int16"))
+
+    last = d_cols[-window_days:]
+    prev = d_cols[-2 * window_days : -window_days]
+    rows = []
+    for store_id, g in wide.groupby("store_id"):
+        daily = g[d_cols].sum(axis=0)
+        rows.append(
+            {
+                "store_id": store_id,
+                "n_items": len(g),
+                "mean_daily_units": float(daily.mean()),
+                "mean_daily_units_last": float(daily[last].mean()),
+                "yoy_growth_last": float(daily[last].sum() / daily[prev].sum() - 1),
+                "pct_zero_item_days_last": float((g[last] == 0).to_numpy().mean() * 100),
+                "zero_sales_days": int((daily == 0).sum()),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("store_id").reset_index(drop=True)
+
+
 def load_sales_long(config: dict[str, Any]) -> pd.DataFrame:
     """Build the long sales table for ``config['scope']['store_id']``.
 
