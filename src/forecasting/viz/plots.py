@@ -656,6 +656,116 @@ def plot_heatmap(
     return _layout(fig, title, height=max(300, 45 * len(table) + 140))
 
 
+def plot_tradeoff(
+    curves: pd.DataFrame,
+    title: str = "",
+    label_col: str = "level",
+    label_model: str | None = "lgbm_tuned",
+) -> go.Figure:
+    """Fill rate (y) vs average inventory value (x), one line per model, points = service level.
+
+    Only ``label_model`` gets text labels (the target service level) to avoid overlap.
+    """
+    fig = go.Figure()
+    for model, g in curves.groupby("model", sort=False):
+        g = g.sort_values("avg_inventory_value")
+        fig.add_trace(
+            go.Scatter(
+                x=g["avg_inventory_value"],
+                y=g["fill_rate"],
+                mode="lines+markers+text",
+                name=model,
+                text=[f"{v:g}" for v in g[label_col]] if model == label_model else None,
+                textposition="top left",
+                textfont={"size": 9},
+                line={"color": MODEL_COLORS.get(model), "width": 2},
+            )
+        )
+    fig.update_xaxes(tickprefix="$", separatethousands=True)
+    fig.update_yaxes(tickformat=".1%")
+    return _layout(
+        fig,
+        title,
+        xaxis_title="rata-rata nilai inventori harian ($)",
+        yaxis_title="fill rate aktual",
+        height=460,
+        legend={"orientation": "h", "y": -0.2},
+    )
+
+
+def plot_coverage(cov: pd.DataFrame, title: str = "") -> go.Figure:
+    """Achieved vs target coverage per period, one line per model and dotted target lines."""
+    fig = go.Figure()
+    for (model, level), g in cov.groupby(["model", "level"], sort=False):
+        fig.add_trace(
+            go.Scatter(
+                x=g["period"],
+                y=g["coverage"],
+                mode="lines+markers",
+                name=f"{model} · P{int(round(level * 100))}",
+                line={"color": MODEL_COLORS.get(model)},
+                legendgroup=model,
+                showlegend=True,
+            )
+        )
+    for level in sorted(cov["level"].unique()):
+        fig.add_hline(
+            y=level,
+            line_dash="dot",
+            line_color="#adb5bd",
+            annotation_text=f"target {level:.0%}",
+            annotation_position="right",
+        )
+    fig.update_yaxes(tickformat=".0%")
+    return _layout(
+        fig,
+        title,
+        xaxis_title="periode simulasi",
+        yaxis_title="coverage aktual",
+        height=440,
+        legend={"orientation": "h", "y": -0.25},
+    )
+
+
+def plot_inventory_trace(trace: pd.DataFrame, title: str = "") -> go.Figure:
+    """Daily simulation of one item: on-hand stock, demand, lost sales and order arrivals."""
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=trace["date"],
+            y=trace["on_hand"],
+            mode="lines",
+            name="stok akhir hari",
+            line={"color": "#457b9d", "width": 2, "shape": "hv"},
+        )
+    )
+    fig.add_trace(go.Bar(x=trace["date"], y=trace["demand"], name="demand", marker_color="#adb5bd"))
+    fig.add_trace(
+        go.Bar(
+            x=trace["date"], y=trace["lost"], name="lost sales (stockout)", marker_color="#e63946"
+        )
+    )
+    arr = trace[trace["received"] > 0]
+    fig.add_trace(
+        go.Scatter(
+            x=arr["date"],
+            y=arr["received"],
+            mode="markers",
+            name="barang datang",
+            marker={"symbol": "triangle-up", "size": 10, "color": "#2a9d8f"},
+        )
+    )
+    return _layout(
+        fig,
+        title,
+        barmode="overlay",
+        xaxis_title=None,
+        yaxis_title="unit",
+        height=400,
+        legend={"orientation": "h", "y": -0.2},
+    )
+
+
 def save_png(
     fig: go.Figure, name: str, config: dict[str, Any], scale: float = 2.0, width: int = 1000
 ) -> Path:

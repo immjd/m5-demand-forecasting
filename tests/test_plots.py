@@ -120,3 +120,33 @@ def test_plot_heatmap_returns_figure() -> None:
         [[0.7, np.nan], [0.9, 1.1]], index=["ets", "sarimax"], columns=["smooth", "lumpy"]
     )
     assert isinstance(plots.plot_heatmap(table, zmid=1.0), go.Figure)
+
+
+def test_inventory_plot_helpers_return_figures() -> None:
+    curves = pd.DataFrame(
+        {
+            "model": ["ets", "ets", "lgbm_tuned", "lgbm_tuned"],
+            "level": [0.9, 0.95] * 2,
+            "fill_rate": [0.95, 0.97, 0.955, 0.975],
+            "avg_inventory_value": [100.0, 140, 95, 130],
+        }
+    )
+    cov = pd.DataFrame(
+        {"model": "ets", "level": [0.9, 0.9], "period": ["F2", "F3"], "coverage": [0.88, 0.91]}
+    )
+    dates = pd.date_range("2016-01-01", periods=5)
+    trace = pd.DataFrame(
+        {
+            "date": dates,
+            "on_hand": [5, 3, 1, 0, 6],
+            "demand": [1, 2, 2, 2, 1],
+            "lost": [0, 0, 0, 1, 0],
+            "received": [0, 0, 0, 0, 7],
+        }
+    )
+    figs = [
+        plots.plot_tradeoff(curves),
+        plots.plot_coverage(cov),
+        plots.plot_inventory_trace(trace),
+    ]
+    assert all(isinstance(f, go.Figure) for f in figs)

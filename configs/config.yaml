@@ -81,3 +81,7 @@ inventory:                # ALL assumptions, documented in README
   lead_time_days: 3
   service_levels: [0.80, 0.85, 0.90, 0.95, 0.975, 0.99]
   holding_cost_rate_annual: 0.25   # fraction of item value per year
+  sim_start_fold: F2               # F1 has no earlier fold to calibrate safety stock on (D-027)
+  interval_levels: [0.80, 0.90, 0.95]   # coverage check of the cumulative (R + L) interval
+  models_all_items: [seasonal_naive, moving_average, lgbm_tuned]
+  models_sample: [seasonal_naive, sarimax, lgbm_tuned]   # 200-item sample (SARIMAX only there)
