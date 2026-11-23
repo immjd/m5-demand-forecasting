@@ -8,6 +8,7 @@ from common import (
     INK,
     MODELS,
     inventory_at_fill,
+    kpi_cards,
     load,
     load_meta,
     num,
@@ -41,11 +42,11 @@ cell = grid[(grid["review"] == review) & (grid["lead"] == lead)]
 total = cell[cell["demand_class"] == "semua"]
 row = total[(total["model"] == model) & (total["level"] == level)].iloc[0]
 
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Fill rate tercapai", pct(row["fill_rate"]))
-k2.metric("Rata-rata nilai stok", usd_k(row["avg_inventory_value"]))
+k1, k2, k3, k4 = kpi_cards(4)
+k1.metric("Fill rate", pct(row["fill_rate"]))
+k2.metric("Nilai stok", usd_k(row["avg_inventory_value"]))
 k3.metric("Tutupan stok", f"{num(row['cover_days'], 1)} hari")
-k4.metric(f"Holding cost ({meta['sim_days']} hari)", usd_k(row["holding_cost"]))
+k4.metric("Holding cost", usd_k(row["holding_cost"]))
 
 st.subheader("Trade-off: fill rate vs nilai stok")
 fig = go.Figure()

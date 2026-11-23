@@ -80,7 +80,7 @@ def pct(value: float, digits: int = 1, signed: bool = False) -> str:
 
 def usd_k(value: float) -> str:
     """Dollar amount in thousands."""
-    return f"${num(value / 1000, 1)} ribu"
+    return f"${num(value / 1000, 1)}k"
 
 
 def series_label(series_id: str) -> str:
@@ -132,6 +132,12 @@ def inventory_at_fill(grid: pd.DataFrame, target: float) -> pd.Series:
     return pd.Series(out)
 
 
-def delta(value: float, versus: str) -> str:
+def delta(value: float) -> str:
     """Metric delta text; needs an ASCII minus so Streamlit picks the right arrow."""
-    return f"{pct(value)} {versus}".replace("−", "-")
+    return pct(value).replace("−", "-")
+
+
+def kpi_cards(n: int, width: int = 175) -> list[Any]:
+    """``n`` fixed-width cards that wrap to the next row instead of truncating numbers."""
+    row = st.container(horizontal=True, gap="small")
+    return [row.container(width=width) for _ in range(n)]

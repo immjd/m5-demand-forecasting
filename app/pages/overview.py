@@ -5,6 +5,7 @@ from common import (
     REPO_URL,
     delta,
     inventory_at_fill,
+    kpi_cards,
     load,
     load_meta,
     num,
@@ -51,20 +52,18 @@ need = inventory_at_fill(base, 0.97)
 vs_sn = need["lgbm_tuned"] / need["seasonal_naive"] - 1
 vs_ma = need["lgbm_tuned"] / need["moving_average"] - 1
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("WRMSSE test · LightGBM", num(lgb), delta(lgb / ma - 1, "vs MA28"), delta_color="inverse")
-c1.caption(f"Semua item. CV: {num(lgb_cv)} ± {num(lgb_sd)}")
-c2.metric(
-    "RMSSE agregat test", num(agg_l), delta(agg_l / agg_s - 1, "vs SARIMAX"), delta_color="inverse"
-)
-c2.caption("11 deret, LightGBM dijumlahkan dari item")
-c3.metric("Nilai stok, fill rate 97%", usd_k(need["lgbm_tuned"]), delta(vs_sn, "vs Seasonal Naive"),
+c1, c2, c3, c4 = kpi_cards(4)
+c1.metric("WRMSSE test", num(lgb), delta(lgb / ma - 1), delta_color="inverse")
+c1.caption(f"LightGBM vs MA28, semua item. CV: {num(lgb_cv)} ± {num(lgb_sd)}")
+c2.metric("RMSSE agregat", num(agg_l), delta(agg_l / agg_s - 1), delta_color="inverse")
+c2.caption("LightGBM vs SARIMAX di test, 11 deret")
+c3.metric("Nilai stok", usd_k(need["lgbm_tuned"]), delta(vs_sn),
           delta_color="inverse")  # fmt: skip
-c3.caption(f"Simulasi {meta['sim_days']} hari")
+c3.caption(f"LightGBM vs Seasonal Naive, fill rate 97%, {meta['sim_days']} hari")
 c4.metric(
     "Stok vs MA28", pct(vs_ma, signed=True), "praktis sama", delta_color="off", delta_arrow="off"
 )
-c4.caption("Pada fill rate 97%")
+c4.caption("LightGBM vs MA28, fill rate 97%")
 
 st.subheader("Tiga temuan utama")
 st.markdown(
