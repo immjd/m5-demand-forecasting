@@ -11,8 +11,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from forecasting.config import resolve_path
-
 TEMPLATE = "plotly_white"
 CATEGORY_COLORS = {"FOODS": "#2a9d8f", "HOUSEHOLD": "#e9c46a", "HOBBIES": "#e76f51"}
 CLASS_COLORS = {
@@ -770,6 +768,9 @@ def save_png(
     fig: go.Figure, name: str, config: dict[str, Any], scale: float = 2.0, width: int = 1000
 ) -> Path:
     """Export a figure to ``<paths.figures>/<name>.png`` for the README."""
+    # lazy: the deployed app imports this module without PyYAML
+    from forecasting.config import resolve_path
+
     out_dir = resolve_path(config, "figures")
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{name}.png"

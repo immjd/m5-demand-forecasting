@@ -109,3 +109,31 @@ def interval_coverage(
             )
         )
     return pd.concat(rows, ignore_index=True)
+
+
+def daily_intervals(
+    calibration: pd.DataFrame, target: pd.DataFrame, levels: Sequence[float]
+) -> pd.DataFrame:
+    """Two-sided daily intervals per series from the residuals of earlier folds.
+
+    The residual ``y_true - y_pred`` quantiles of the open calibration days are added
+    to the target forecasts (so a systematic bias shifts the interval). Actuals of the
+    target window are never used.
+
+    Returns:
+        Copy of ``target`` with ``lo<level>`` / ``hi<level>`` columns, e.g. ``lo80``.
+    """
+    cal = calibration.loc[calibration["is_closed"] == 0]
+    resid = cal["y_true"].astype(float) - cal["y_pred"].astype(float)
+    groups = resid.groupby(cal["series_id"].astype(str))
+    out = target.assign(series_id=target["series_id"].astype(str))
+    missing = set(out["series_id"]) - set(groups.groups)
+    if missing:
+        raise ValueError(f"no calibration residuals for {sorted(missing)[:3]}")
+    f = out["y_pred"].astype(float)
+    for level in levels:
+        tail = (1.0 - level) / 2.0
+        name = round(level * 100)
+        out[f"lo{name}"] = np.maximum(f + out["series_id"].map(groups.quantile(tail)), 0.0)
+        out[f"hi{name}"] = np.maximum(f + out["series_id"].map(groups.quantile(1.0 - tail)), 0.0)
+    return out

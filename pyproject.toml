@@ -25,4 +25,5 @@ extend-include = ["*.ipynb"]
 select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-"notebooks/*.ipynb" = ["E501"]  # long Indonesian figure titles in narrative notebooks
+"notebooks/*.ipynb" = ["E501"]
+"app/**/*.py" = ["E501"]  # long Indonesian UI text  # long Indonesian figure titles in narrative notebooks
